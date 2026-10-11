@@ -125,8 +125,16 @@ export function convertToChatMessages(
         return ((message as MessageType.AssistantTurn).steps ?? []).length > 0;
       }
       if (message.type === 'text') {
-        const text = (message as MessageType.Text).text;
-        return text !== undefined && text !== null && text.trim() !== '';
+        const textMessage = message as MessageType.Text;
+        const text = textMessage.text;
+        // An image-only user message (empty caption) still carries content
+        // for a vision model; dropping it would erase the image from history.
+        const hasImages =
+          isMultimodalEnabled && (textMessage.imageUris?.length ?? 0) > 0;
+        return (
+          hasImages ||
+          (text !== undefined && text !== null && text.trim() !== '')
+        );
       }
       return false;
     })

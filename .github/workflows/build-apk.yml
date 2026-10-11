@@ -1,0 +1,102 @@
+name: Build APK
+
+# Builds an installable arm64 release APK (debug-signed, dummy service config)
+# and publishes it as a GitHub pre-release so it can be downloaded directly
+# on a phone. Uses llama.rn's prebuilt native libraries, so no Hexagon SDK.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - ccr-4e61218b-qovaja
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+          cache: 'gradle'
+
+      - name: Create dummy google-services.json
+        run: |
+          cat > android/app/google-services.json << 'EOL'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "dummy-project",
+              "storage_bucket": "dummy-project.appspot.com"
+            },
+            "client": [{
+              "client_info": {
+                "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                "android_client_info": {"package_name": "com.pocketpalai"}
+              },
+              "api_key": [{"current_key": "dummy-api-key"}]
+            }]
+          }
+          EOL
+
+      # Cloud features (PalsHub, sign-in) are off: their real keys are not
+      # available here. Local models work fully offline.
+      - name: Create .env
+        run: |
+          cat > .env << 'EOL'
+          FIREBASE_FUNCTIONS_URL=https://dummy-firebase-url.com
+          SUPABASE_URL=https://dummy-supabase-url.supabase.co
+          SUPABASE_ANON_KEY=dummy-anon-key
+          PALSHUB_API_BASE_URL=https://dummy-palshub-api.com
+          APP_URL=pocketpal://app
+          ENABLE_PALSHUB_INTEGRATION=false
+          ENABLE_AUTHENTICATION=false
+          ENABLE_OFFLINE_MODE=true
+          GOOGLE_IOS_CLIENT_ID=dummy-ios-client-id.apps.googleusercontent.com
+          GOOGLE_WEB_CLIENT_ID=dummy-web-client-id.apps.googleusercontent.com
+          EOL
+
+      - name: Build release APK (arm64)
+        working-directory: android
+        run: |
+          ./gradlew assembleProdRelease \
+            -PreactNativeArchitectures=arm64-v8a \
+            -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g"
+
+      - name: Publish pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          TAG="apk-${SHORT_SHA}"
+          APK="PocketPal-${SHORT_SHA}-arm64.apk"
+          cp android/app/build/outputs/apk/prod/release/app-prod-release.apk "$APK"
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" "$APK" \
+            --prerelease \
+            --target "$GITHUB_SHA" \
+            --title "APK ${SHORT_SHA} (${GITHUB_REF_NAME})" \
+            --notes "Test build from ${GITHUB_REF_NAME} @ ${GITHUB_SHA}. arm64 only, debug-signed; cloud features (PalsHub, sign-in) disabled."

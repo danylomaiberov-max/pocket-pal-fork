@@ -2012,15 +2012,18 @@ class ModelStore {
       return {isMultimodalInit: true, resolvedMmProjPath: mmProjPath};
     }
 
-    // Priority 2: Auto-resolve from model's default projection model
-    if (
-      model.supportsMultimodal &&
-      model.defaultProjectionModel &&
-      visionEnabled
-    ) {
-      const projectionModel = this.models.find(
-        m => m.id === model.defaultProjectionModel,
-      );
+    // Priority 2: Auto-resolve from model's default projection model, falling
+    // back to any other downloaded compatible projector (e.g. the user deleted
+    // the default, or downloaded a different precision from the repo).
+    if (model.supportsMultimodal && visionEnabled) {
+      const defaultProjection = model.defaultProjectionModel
+        ? this.models.find(m => m.id === model.defaultProjectionModel)
+        : undefined;
+      const projectionModel = defaultProjection?.isDownloaded
+        ? defaultProjection
+        : this.getCompatibleProjectionModels(model.id).find(
+            m => m.isDownloaded,
+          );
       if (projectionModel?.isDownloaded) {
         const resolvedPath = await this.getModelFullPath(projectionModel);
         return {
@@ -3537,6 +3540,21 @@ class ModelStore {
     const projectionModel = this.models.find(
       m => m.id === model.defaultProjectionModel,
     );
+
+    // Any downloaded compatible projector works when the default is absent
+    // (mirrors the fallback in resolveMultimodalConfig).
+    if (!projectionModel?.isDownloaded) {
+      const fallback = this.getCompatibleProjectionModels(model.id).find(
+        m => m.isDownloaded,
+      );
+      if (fallback) {
+        return {
+          isAvailable: true,
+          state: 'downloaded',
+          projectionModel: fallback,
+        };
+      }
+    }
 
     if (!projectionModel) {
       return {
