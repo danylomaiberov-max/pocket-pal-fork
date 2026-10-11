@@ -100,6 +100,31 @@ describe('convertToChatMessages', () => {
     ] as ChatMessage[]);
   });
 
+  it('keeps image-only messages (empty caption) when multimodal is enabled', () => {
+    const messages: MessageType.Text[] = [
+      {
+        id: '1',
+        author: user,
+        text: '',
+        type: 'text',
+        imageUris: ['file:///path/to/image1.jpg'],
+        createdAt: Date.now(),
+      },
+    ];
+
+    expect(convertToChatMessages(messages, true)).toEqual([
+      {
+        role: 'user',
+        content: [
+          {type: 'text', text: ''},
+          {type: 'image_url', image_url: {url: 'file:///path/to/image1.jpg'}},
+        ],
+      },
+    ] as ChatMessage[]);
+    // Without vision the empty text carries nothing, so it is still dropped.
+    expect(convertToChatMessages(messages, false)).toEqual([]);
+  });
+
   it('should convert multimodal messages to text-only when multimodal is disabled', () => {
     const messages: MessageType.Text[] = [
       {

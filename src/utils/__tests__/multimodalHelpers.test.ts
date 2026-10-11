@@ -131,6 +131,18 @@ describe('multimodalHelpers', () => {
       );
     });
 
+    it('returns true when mmproj ends the filename or sits mid-name', () => {
+      expect(isProjectionModel('gemma-3-4b-it-mmproj.gguf')).toBe(true);
+      expect(isProjectionModel('mmproj.gguf')).toBe(true);
+      expect(isProjectionModel('Qwen2.5-VL-7B-mmproj-f16.gguf')).toBe(true);
+      expect(isProjectionModel('vision/mmproj-F16.gguf')).toBe(true);
+    });
+
+    it('returns false when mmproj is only part of a longer word', () => {
+      expect(isProjectionModel('notmmproj-q4_0.gguf')).toBe(false);
+      expect(isProjectionModel('mmprojector-q4_0.gguf')).toBe(false);
+    });
+
     it('returns false for non-projection model filenames', () => {
       expect(isProjectionModel('llama-3.1-8b-instruct-q4_0.gguf')).toBe(false);
       expect(isProjectionModel('vision-model-q8_0.gguf')).toBe(false);

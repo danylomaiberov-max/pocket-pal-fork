@@ -1589,6 +1589,36 @@ describe('ModelStore', () => {
       expect(result.reason).toBe('Projection model is currently active');
     });
 
+    it('falls back to a downloaded compatible projector when the default is missing', () => {
+      const defaultProj = {
+        ...presetModelFixture,
+        id: 'author/repo/mmproj-q8_0.gguf',
+        modelType: ModelType.PROJECTION,
+        isDownloaded: false,
+      };
+      const otherProj = {
+        ...presetModelFixture,
+        id: 'author/repo/mmproj-f16.gguf',
+        modelType: ModelType.PROJECTION,
+        isDownloaded: true,
+      };
+      const llmModel = {
+        ...presetModelFixture,
+        id: 'author/repo/model-q4_k_m.gguf',
+        supportsMultimodal: true,
+        visionEnabled: true,
+        defaultProjectionModel: defaultProj.id,
+        compatibleProjectionModels: [defaultProj.id, otherProj.id],
+        isDownloaded: true,
+      };
+      modelStore.models = [defaultProj, otherProj, llmModel];
+
+      const status = modelStore.getProjectionModelStatus(llmModel);
+      expect(status.isAvailable).toBe(true);
+      expect(status.state).toBe('downloaded');
+      expect(status.projectionModel?.id).toBe(otherProj.id);
+    });
+
     it('should allow deletion of projection model used by downloaded LLM with warning', () => {
       const projModel = {
         ...presetModelFixture,
